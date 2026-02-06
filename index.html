@@ -127,24 +127,68 @@ function isDown() { return keys['ArrowDown'] || keys['KeyS']; }
 function isJump() { return keys['Space']; }
 
 // ---- COLORS ----
-const COLORS = {
-  bg: '#000',
-  platform: '#c84c0c',
-  platformTop: '#e87040',
-  vine: '#0a0',
-  vineChain: '#888',
-  player: '#f80',
-  playerShirt: '#c00',
-  dk: '#a52',
-  cage: '#aaa',
-  snapjawRed: '#f00',
-  snapjawBlue: '#22f',
-  fruit: '#ff0',
-  key: '#ff0',
-  lock: '#888',
-  text: '#fff',
-  scoreText: '#0ff',
-};
+const LEVEL_PALETTES = [
+  { // Level 1: Classic jungle - warm greens and browns
+    bg: '#001a00',
+    platform: '#c84c0c',
+    platformTop: '#e87040',
+    vine: '#0a0',
+    vineChain: '#888',
+    player: '#f80',
+    playerShirt: '#c00',
+    dk: '#a52',
+    cage: '#aaa',
+    snapjawRed: '#f00',
+    snapjawBlue: '#22f',
+    fruit: '#ff0',
+    key: '#ff0',
+    lock: '#888',
+    text: '#fff',
+    scoreText: '#0ff',
+  },
+  { // Level 2: Twilight cavern - purples and blues
+    bg: '#0a0014',
+    platform: '#5a2d82',
+    platformTop: '#8040c0',
+    vine: '#2dd',
+    vineChain: '#99a',
+    player: '#f90',
+    playerShirt: '#d22',
+    dk: '#a63',
+    cage: '#bba',
+    snapjawRed: '#f44',
+    snapjawBlue: '#48f',
+    fruit: '#0ff',
+    key: '#0ff',
+    lock: '#99a',
+    text: '#eef',
+    scoreText: '#f8f',
+  },
+  { // Level 3: Frozen sky - icy blues and white
+    bg: '#000a1a',
+    platform: '#1a5a8a',
+    platformTop: '#40a0e0',
+    vine: '#e0e0ff',
+    vineChain: '#80c0f0',
+    player: '#ff0',
+    playerShirt: '#f60',
+    dk: '#b63',
+    cage: '#cde',
+    snapjawRed: '#f44',
+    snapjawBlue: '#0ef',
+    fruit: '#f0f',
+    key: '#f0f',
+    lock: '#6aa',
+    text: '#eef',
+    scoreText: '#4df',
+  },
+];
+let COLORS = { ...LEVEL_PALETTES[0] };
+
+function applyLevelPalette(lvl) {
+  const idx = ((lvl - 1) % 3);
+  Object.assign(COLORS, LEVEL_PALETTES[idx]);
+}
 
 // ---- LEVEL DATA ----
 function buildLevel(lvl) {
@@ -402,6 +446,7 @@ let scorePopups = [];
 let enemySpawnTimer = 0;
 
 function initLevel() {
+  applyLevelPalette(level);
   levelData = buildLevel(level);
   enemies = [];
   particles = [];
@@ -766,7 +811,7 @@ function showOverlay() {
     document.querySelector('#overlay h2').textContent = `Score: ${score}`;
     btn.textContent = 'PRESS SPACE TO CONTINUE';
   } else {
-    document.querySelector('#overlay h1').textContent = 'DONKEY KONG JR.';
+    document.querySelector('#overlay h1').textContent = 'VINE SNAPPER';
     document.querySelector('#overlay h2').textContent = 'Save Papa!';
     btn.textContent = 'PRESS SPACE TO START';
   }
