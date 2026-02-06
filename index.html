@@ -490,6 +490,273 @@ function playSound(type) {
   } catch(e) {}
 }
 
+// ---- MUSIC ----
+let musicPlaying = false;
+let musicInterval = null;
+
+function getLevelMusic(lvl) {
+  const mod = ((lvl - 1) % 3) + 1;
+  if (mod === 1) {
+    // Level 1: Bright, bouncy jungle romp (C major pentatonic, 170 bpm)
+    return {
+      bpm: 170,
+      bassWave: 'triangle',
+      melodyWave: 'square',
+      bass: [
+        262, 262, 0, 330, 262, 0, 392, 392,
+        330, 330, 0, 262, 392, 0, 330, 0,
+        294, 294, 0, 392, 330, 0, 262, 262,
+        392, 0, 330, 294, 262, 330, 392, 0,
+      ],
+      melody: [
+        784, 0, 880, 784, 0, 659, 784, 880,
+        988, 0, 880, 0, 784, 659, 784, 0,
+        880, 988, 0, 1047, 988, 0, 880, 784,
+        659, 0, 784, 880, 988, 0, 1047, 0,
+      ],
+      arp: [
+        523, 659, 784, 659, 523, 659, 784, 988,
+        523, 659, 784, 659, 523, 784, 659, 523,
+        587, 698, 880, 698, 587, 698, 880, 698,
+        523, 659, 784, 988, 784, 659, 523, 0,
+      ],
+      kick: [
+        1, 0, 0, 1, 1, 0, 1, 0,
+        1, 0, 0, 1, 0, 1, 1, 0,
+        1, 0, 1, 0, 1, 0, 0, 1,
+        1, 0, 0, 1, 1, 0, 1, 0,
+      ],
+      hihat: [
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+      ],
+      snare: [
+        0, 0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 1, 0, 0, 1,
+        0, 0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 0, 1, 0, 1, 0,
+      ],
+    };
+  } else if (mod === 2) {
+    // Level 2: Driving, urgent vine chase (D minor, 185 bpm)
+    return {
+      bpm: 185,
+      bassWave: 'sawtooth',
+      melodyWave: 'square',
+      bass: [
+        147, 147, 175, 0, 196, 196, 0, 220,
+        175, 0, 147, 147, 220, 0, 196, 175,
+        165, 165, 0, 196, 220, 0, 262, 220,
+        196, 0, 175, 165, 147, 147, 175, 0,
+      ],
+      melody: [
+        587, 698, 0, 784, 880, 0, 784, 698,
+        587, 0, 698, 784, 0, 880, 784, 0,
+        698, 784, 880, 0, 1047, 880, 0, 784,
+        698, 587, 0, 698, 784, 0, 587, 0,
+      ],
+      arp: [
+        294, 349, 440, 349, 294, 440, 349, 294,
+        349, 440, 523, 440, 349, 440, 349, 294,
+        330, 392, 494, 392, 330, 494, 392, 330,
+        294, 349, 440, 523, 440, 349, 294, 0,
+      ],
+      kick: [
+        1, 0, 1, 0, 1, 0, 1, 1,
+        0, 1, 0, 1, 1, 0, 1, 0,
+        1, 0, 1, 1, 0, 1, 0, 1,
+        0, 1, 1, 0, 1, 0, 1, 1,
+      ],
+      hihat: [
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+      ],
+      snare: [
+        0, 0, 0, 1, 0, 0, 1, 0,
+        0, 0, 1, 0, 0, 1, 0, 0,
+        0, 0, 0, 1, 0, 0, 1, 0,
+        0, 1, 0, 0, 1, 0, 0, 1,
+      ],
+    };
+  } else {
+    // Level 3: Frantic, high-energy finale (E minor, 200 bpm)
+    return {
+      bpm: 200,
+      bassWave: 'square',
+      melodyWave: 'sawtooth',
+      bass: [
+        165, 0, 196, 165, 220, 0, 247, 220,
+        196, 0, 165, 196, 0, 220, 247, 0,
+        262, 247, 0, 220, 196, 0, 165, 196,
+        220, 247, 262, 0, 247, 220, 196, 165,
+      ],
+      melody: [
+        659, 784, 988, 0, 784, 659, 0, 784,
+        988, 1175, 0, 988, 784, 0, 988, 1175,
+        1319, 0, 1175, 988, 0, 784, 988, 0,
+        1175, 988, 784, 659, 784, 988, 0, 659,
+      ],
+      arp: [
+        330, 392, 494, 659, 494, 392, 330, 494,
+        392, 494, 659, 784, 659, 494, 392, 330,
+        370, 440, 554, 740, 554, 440, 370, 554,
+        330, 392, 494, 659, 784, 659, 494, 330,
+      ],
+      kick: [
+        1, 0, 1, 1, 0, 1, 0, 1,
+        1, 0, 1, 0, 1, 1, 0, 1,
+        0, 1, 1, 0, 1, 0, 1, 1,
+        1, 0, 1, 0, 1, 1, 0, 1,
+      ],
+      hihat: [
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 1, 1, 1, 1, 1, 1, 1,
+      ],
+      snare: [
+        0, 0, 1, 0, 0, 1, 0, 1,
+        0, 0, 1, 0, 1, 0, 0, 1,
+        0, 1, 0, 0, 1, 0, 1, 0,
+        0, 1, 0, 1, 0, 0, 1, 0,
+      ],
+    };
+  }
+}
+
+function startMusic() {
+  if (musicPlaying) return;
+  ensureAudio();
+  musicPlaying = true;
+
+  const m = getLevelMusic(level);
+  const beatLen = 60 / m.bpm;
+  const len = m.bass.length;
+  let beatIndex = 0;
+
+  musicInterval = setInterval(() => {
+    if (!musicPlaying || !audioCtx) return;
+    const t = audioCtx.currentTime;
+    const idx = beatIndex % len;
+
+    // Bass
+    if (m.bass[idx] > 0) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = m.bassWave;
+      osc.frequency.setValueAtTime(m.bass[idx], t);
+      gain.gain.setValueAtTime(0.08, t);
+      gain.gain.linearRampToValueAtTime(0, t + beatLen * 0.7);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + beatLen * 0.7);
+    }
+
+    // Melody
+    if (m.melody[idx] > 0) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = m.melodyWave;
+      osc.frequency.setValueAtTime(m.melody[idx], t);
+      gain.gain.setValueAtTime(0.045, t);
+      gain.gain.linearRampToValueAtTime(0, t + beatLen * 0.5);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + beatLen * 0.5);
+    }
+
+    // Arpeggio (bouncy chiptune layer)
+    if (m.arp[idx] > 0) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(m.arp[idx], t);
+      gain.gain.setValueAtTime(0.03, t);
+      gain.gain.linearRampToValueAtTime(0, t + beatLen * 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + beatLen * 0.35);
+    }
+
+    // Kick drum
+    if (m.kick[idx]) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.linearRampToValueAtTime(0, t + 0.1);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.1);
+    }
+
+    // Snare
+    if (m.snare[idx]) {
+      const bufSize = audioCtx.sampleRate * 0.08;
+      const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.15));
+      }
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1200, t);
+      filter.Q.setValueAtTime(0.8, t);
+      gain.gain.setValueAtTime(0.1, t);
+      gain.gain.linearRampToValueAtTime(0, t + 0.08);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      src.start(t);
+    }
+
+    // Hi-hat
+    if (m.hihat[idx]) {
+      const bufSize = audioCtx.sampleRate * 0.025;
+      const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.08));
+      }
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(7000, t);
+      gain.gain.setValueAtTime(0.05, t);
+      gain.gain.linearRampToValueAtTime(0, t + 0.025);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      src.start(t);
+    }
+
+    beatIndex++;
+  }, beatLen * 1000);
+}
+
+function stopMusic() {
+  musicPlaying = false;
+  if (musicInterval) {
+    clearInterval(musicInterval);
+    musicInterval = null;
+  }
+}
+
 // ---- GAME FUNCTIONS ----
 function showOverlay() {
   overlay.classList.remove('hidden');
@@ -512,6 +779,7 @@ function startGame() {
   lives = 3;
   level = 1;
   initLevel();
+  startMusic();
 }
 
 function playerDie() {
@@ -519,6 +787,7 @@ function playerDie() {
   gameState = 'dying';
   deathTimer = 90;
   lives--;
+  stopMusic();
   playSound('die');
   // Death particles
   for (let i = 0; i < 15; i++) {
@@ -584,6 +853,7 @@ function update() {
       } else {
         gameState = 'playing';
         resetPlayer();
+        startMusic();
       }
     }
     return;
@@ -596,6 +866,7 @@ function update() {
       level++;
       initLevel();
       gameState = 'playing';
+      startMusic();
     }
     return;
   }
@@ -847,6 +1118,7 @@ function update() {
         if (levelData.keyPositions.every(kk => kk.atLock)) {
           gameState = 'winning';
           winTimer = 120;
+          stopMusic();
           playSound('win');
           // Victory particles
           for (let i = 0; i < 30; i++) {
