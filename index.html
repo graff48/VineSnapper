@@ -64,9 +64,10 @@ canvas {
     <h2>Save Papa!</h2>
     <div class="instructions">
       Arrow Keys / WASD - Move &amp; Climb<br>
-      Space - Jump<br>
+      Space - Jump | Z/X - Fire<br>
       Climb vines to push keys into locks!<br>
-      Avoid the Snapjaws!<br>
+      Avoid Snapjaws &amp; Beetles!<br>
+      Grab the flamethrower to roast Beetles!<br>
       Collect fruit for bonus points!
     </div>
     <div class="start-btn" id="startBtn">PRESS SPACE TO START</div>
@@ -125,6 +126,7 @@ function isRight() { return keys['ArrowRight'] || keys['KeyD']; }
 function isUp() { return keys['ArrowUp'] || keys['KeyW']; }
 function isDown() { return keys['ArrowDown'] || keys['KeyS']; }
 function isJump() { return keys['Space']; }
+function isFire() { return keys['KeyZ'] || keys['KeyX']; }
 
 // ---- COLORS ----
 const LEVEL_PALETTES = [
@@ -145,6 +147,12 @@ const LEVEL_PALETTES = [
     lock: '#888',
     text: '#fff',
     scoreText: '#0ff',
+    beetle: '#4a2',
+    beetleShell: '#6c3',
+    flamethrower: '#f60',
+    flame1: '#f80',
+    flame2: '#ff0',
+    flame3: '#f44',
   },
   { // Level 2: Twilight cavern - purples and blues
     bg: '#0a0014',
@@ -163,6 +171,12 @@ const LEVEL_PALETTES = [
     lock: '#99a',
     text: '#eef',
     scoreText: '#f8f',
+    beetle: '#5a4080',
+    beetleShell: '#8060b0',
+    flamethrower: '#f80',
+    flame1: '#f60',
+    flame2: '#ff0',
+    flame3: '#f88',
   },
   { // Level 3: Frozen sky - icy blues and white
     bg: '#000a1a',
@@ -181,6 +195,12 @@ const LEVEL_PALETTES = [
     lock: '#6aa',
     text: '#eef',
     scoreText: '#4df',
+    beetle: '#2a6a4a',
+    beetleShell: '#40a070',
+    flamethrower: '#fa0',
+    flame1: '#f80',
+    flame2: '#ff4',
+    flame3: '#f66',
   },
 ];
 let COLORS = { ...LEVEL_PALETTES[0] };
@@ -198,6 +218,8 @@ function buildLevel(lvl) {
   const enemySpawns = [];
   const lockPositions = [];
   const keyPositions = [];
+  const beetleSpawns = [];
+  let flamethrower = null;
 
   // Ground platform
   platforms.push({ x: 0, y: H - 32, w: W, h: 16 });
@@ -275,6 +297,14 @@ function buildLevel(lvl) {
     lockPositions.push({ x: 180, y: H - 430 });
     lockPositions.push({ x: 340, y: H - 430 });
 
+    // Beetles - patrol on platforms (platformIdx is index into platforms array)
+    beetleSpawns.push({ x: 30, y: H - 110, platformIdx: 1, dir: 1, speed: 0.8 });
+    beetleSpawns.push({ x: 320, y: H - 180, platformIdx: 5, dir: -1, speed: 1.0 });
+    beetleSpawns.push({ x: 250, y: H - 250, platformIdx: 7, dir: 1, speed: 0.9 });
+
+    // Flamethrower pickup on second tier platform
+    flamethrower = { x: 160, y: H - 180, collected: false };
+
   } else if ((lvl % 3) === 2) {
     // Level 2 layout - more chains, more enemies
     platforms.push({ x: 0, y: H - 90, w: 140, h: 10 });
@@ -338,6 +368,15 @@ function buildLevel(lvl) {
     lockPositions.push({ x: 200, y: H - 425 });
     lockPositions.push({ x: 300, y: H - 425 });
     lockPositions.push({ x: 370, y: H - 425 });
+
+    // Beetles
+    beetleSpawns.push({ x: 200, y: H - 100, platformIdx: 2, dir: 1, speed: 0.9 });
+    beetleSpawns.push({ x: 100, y: H - 170, platformIdx: 4, dir: -1, speed: 1.0 });
+    beetleSpawns.push({ x: 50, y: H - 240, platformIdx: 6, dir: 1, speed: 1.1 });
+    beetleSpawns.push({ x: 400, y: H - 240, platformIdx: 8, dir: -1, speed: 0.9 });
+
+    // Flamethrower pickup
+    flamethrower = { x: 350, y: H - 170, collected: false };
 
   } else {
     // Level 3 layout - hardest
@@ -413,9 +452,19 @@ function buildLevel(lvl) {
     lockPositions.push({ x: 200, y: H - 450 });
     lockPositions.push({ x: 280, y: H - 450 });
     lockPositions.push({ x: 350, y: H - 450 });
+
+    // Beetles
+    beetleSpawns.push({ x: 60, y: H - 90, platformIdx: 1, dir: 1, speed: 1.0 });
+    beetleSpawns.push({ x: 380, y: H - 90, platformIdx: 2, dir: -1, speed: 0.9 });
+    beetleSpawns.push({ x: 200, y: H - 155, platformIdx: 4, dir: 1, speed: 1.1 });
+    beetleSpawns.push({ x: 80, y: H - 220, platformIdx: 6, dir: -1, speed: 1.0 });
+    beetleSpawns.push({ x: 300, y: H - 285, platformIdx: 9, dir: 1, speed: 1.2 });
+
+    // Flamethrower pickup
+    flamethrower = { x: 300, y: H - 220, collected: false };
   }
 
-  return { platforms, vines, fruits, enemySpawns, lockPositions, keyPositions };
+  return { platforms, vines, fruits, enemySpawns, lockPositions, keyPositions, beetleSpawns, flamethrower };
 }
 
 // ---- PLAYER ----
@@ -434,6 +483,9 @@ function resetPlayer() {
     animTimer: 0,
     jumpPressed: false,
     invincible: 0,
+    hasFlamethrower: false,
+    flameActive: false,
+    flameTimer: 0,
   };
   roundTimer = ROUND_TIME;
 }
@@ -441,6 +493,7 @@ function resetPlayer() {
 // ---- LEVEL STATE ----
 let levelData = {};
 let enemies = [];
+let beetles = [];
 let particles = [];
 let scorePopups = [];
 let enemySpawnTimer = 0;
@@ -464,6 +517,26 @@ function initLevel() {
 
   // Reset fruits
   levelData.fruits.forEach(f => f.collected = false);
+
+  // Reset flamethrower
+  if (levelData.flamethrower) levelData.flamethrower.collected = false;
+
+  // Spawn beetles from level data
+  beetles = [];
+  for (const bs of levelData.beetleSpawns) {
+    const plat = levelData.platforms[bs.platformIdx];
+    if (!plat) continue;
+    beetles.push({
+      x: bs.x,
+      y: plat.y - 14,
+      w: 16, h: 14,
+      dir: bs.dir,
+      speed: bs.speed + (level - 1) * 0.1,
+      platformIdx: bs.platformIdx,
+      animFrame: 0,
+      alive: true,
+    });
+  }
 }
 
 // ---- AUDIO (simple synth) ----
@@ -530,6 +603,40 @@ function playSound(type) {
         gain.gain.setValueAtTime(0.1, t);
         gain.gain.linearRampToValueAtTime(0, t + 0.6);
         osc.start(t); osc.stop(t + 0.6);
+        break;
+      case 'flame':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, t);
+        osc.frequency.linearRampToValueAtTime(80, t + 0.3);
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(t); osc.stop(t + 0.3);
+        // Add noise burst for crackling
+        {
+          const bufSize = audioCtx.sampleRate * 0.15;
+          const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufSize * 0.3));
+          const src = audioCtx.createBufferSource();
+          src.buffer = buf;
+          const g2 = audioCtx.createGain();
+          g2.gain.setValueAtTime(0.08, t);
+          g2.gain.linearRampToValueAtTime(0, t + 0.15);
+          src.connect(g2);
+          g2.connect(audioCtx.destination);
+          src.start(t);
+        }
+        return; // Already connected manually
+      case 'pickup':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(500, t);
+        osc.frequency.linearRampToValueAtTime(900, t + 0.08);
+        osc.frequency.linearRampToValueAtTime(1200, t + 0.15);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.2);
+        osc.start(t); osc.stop(t + 0.2);
         break;
     }
   } catch(e) {}
@@ -1144,6 +1251,122 @@ function update() {
     }
   }
 
+  // ---- BEETLES ----
+  for (let i = beetles.length - 1; i >= 0; i--) {
+    const b = beetles[i];
+    if (!b.alive) continue;
+    const plat = levelData.platforms[b.platformIdx];
+    if (!plat) continue;
+
+    // Move horizontally
+    b.x += b.dir * b.speed;
+    b.animFrame = (b.animFrame + 0.15) % 2;
+
+    // Reverse at platform edges
+    if (b.x <= plat.x) { b.x = plat.x; b.dir = 1; }
+    if (b.x + b.w >= plat.x + plat.w) { b.x = plat.x + plat.w - b.w; b.dir = -1; }
+
+    // Collision with player
+    if (player.invincible <= 0 && rectOverlap(player, b)) {
+      if (player.flameActive) {
+        // Flame kills beetle
+        b.alive = false;
+        addScorePopup(b.x, b.y, 300);
+        playSound('fruit');
+        for (let j = 0; j < 8; j++) {
+          particles.push({
+            x: b.x + b.w / 2, y: b.y + b.h / 2,
+            vx: (Math.random() - 0.5) * 4,
+            vy: (Math.random() - 0.5) * 4 - 1,
+            life: 25 + Math.random() * 15,
+            color: [COLORS.flame1, COLORS.flame2, COLORS.beetle][Math.floor(Math.random() * 3)],
+          });
+        }
+      } else if (player.vy > 0 && player.y + player.h - 8 < b.y + b.h / 2) {
+        // Stomp from above
+        b.alive = false;
+        addScorePopup(b.x, b.y, 200);
+        player.vy = JUMP_FORCE * 0.6;
+        playSound('fruit');
+      } else {
+        playerDie();
+        return;
+      }
+    }
+  }
+  // Remove dead beetles
+  for (let i = beetles.length - 1; i >= 0; i--) {
+    if (!beetles[i].alive) beetles.splice(i, 1);
+  }
+
+  // ---- FLAMETHROWER PICKUP ----
+  const ft = levelData.flamethrower;
+  if (ft && !ft.collected && !player.hasFlamethrower) {
+    if (rectOverlap(player, { x: ft.x - 8, y: ft.y - 8, w: 16, h: 16 })) {
+      ft.collected = true;
+      player.hasFlamethrower = true;
+      playSound('pickup');
+      addScorePopup(ft.x, ft.y, 100);
+      for (let i = 0; i < 8; i++) {
+        particles.push({
+          x: ft.x, y: ft.y,
+          vx: (Math.random() - 0.5) * 3,
+          vy: -Math.random() * 3,
+          life: 25,
+          color: [COLORS.flame1, COLORS.flame2, COLORS.flamethrower][Math.floor(Math.random() * 3)],
+        });
+      }
+    }
+  }
+
+  // ---- FLAME ACTIVATION ----
+  if (player.hasFlamethrower && !player.flameActive && isFire() && !player.climbing) {
+    player.flameActive = true;
+    player.flameTimer = 30;
+    player.hasFlamethrower = false;
+    playSound('flame');
+  }
+  if (player.flameActive) {
+    player.flameTimer--;
+    // Flame hitbox - check beetles
+    const flameX = player.facing === 1 ? player.x + player.w : player.x - 40;
+    const flameRect = { x: flameX, y: player.y - 4, w: 40, h: player.h + 8 };
+    for (let i = beetles.length - 1; i >= 0; i--) {
+      const b = beetles[i];
+      if (!b.alive) continue;
+      if (rectOverlap(flameRect, b)) {
+        b.alive = false;
+        addScorePopup(b.x, b.y, 300);
+        playSound('fruit');
+        for (let j = 0; j < 8; j++) {
+          particles.push({
+            x: b.x + b.w / 2, y: b.y + b.h / 2,
+            vx: (Math.random() - 0.5) * 4,
+            vy: (Math.random() - 0.5) * 4 - 1,
+            life: 25 + Math.random() * 15,
+            color: [COLORS.flame1, COLORS.flame2, '#fff'][Math.floor(Math.random() * 3)],
+          });
+        }
+      }
+    }
+    // Flame particles
+    if (frameCount % 2 === 0) {
+      const fx = player.facing === 1 ? player.x + player.w + Math.random() * 30 : player.x - Math.random() * 30;
+      particles.push({
+        x: fx, y: player.y + 4 + Math.random() * 10,
+        vx: player.facing * (1 + Math.random() * 2),
+        vy: (Math.random() - 0.5) * 2,
+        life: 10 + Math.random() * 8,
+        color: [COLORS.flame1, COLORS.flame2, COLORS.flame3][Math.floor(Math.random() * 3)],
+      });
+    }
+    if (player.flameTimer <= 0) player.flameActive = false;
+    // Remove dead beetles
+    for (let i = beetles.length - 1; i >= 0; i--) {
+      if (!beetles[i].alive) beetles.splice(i, 1);
+    }
+  }
+
   // ---- KEYS ----
   for (let ki = 0; ki < levelData.keyPositions.length; ki++) {
     const k = levelData.keyPositions[ki];
@@ -1279,6 +1502,9 @@ function draw() {
     ctx.fillRect(f.x - 1, f.y - 9, 2, 4);
   }
 
+  // Draw flamethrower pickup
+  drawFlamethrowerPickup();
+
   // Draw DK and cage at top
   drawDKCage();
 
@@ -1322,10 +1548,18 @@ function draw() {
     drawSnapjaw(e);
   }
 
+  // Draw beetles
+  for (const b of beetles) {
+    if (b.alive) drawBeetle(b);
+  }
+
   // Draw player (if alive)
   if (gameState !== 'dying' || deathTimer > 60) {
     drawPlayer();
   }
+
+  // Draw flame effect
+  drawFlameEffect();
 
   // Draw particles
   for (const p of particles) {
@@ -1526,6 +1760,103 @@ function drawSnapjaw(e) {
   ctx.fillRect(px + 10, py + 2, 2, 2);
 }
 
+function drawBeetle(b) {
+  const px = b.x;
+  const py = b.y;
+  const legAnim = Math.sin(frameCount * 0.3) * 2;
+
+  ctx.save();
+  // Flip beetle to face movement direction
+  if (b.dir === -1) {
+    ctx.translate(px + b.w, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(0, 0);
+  } else {
+    ctx.translate(px, 0);
+  }
+
+  // Shell (rounded body)
+  ctx.fillStyle = COLORS.beetleShell;
+  ctx.fillRect(2, py + 2, 12, 8);
+  // Shell highlight
+  ctx.fillStyle = COLORS.beetle;
+  ctx.fillRect(3, py + 3, 10, 3);
+  // Shell stripe
+  ctx.fillRect(7, py + 2, 2, 8);
+
+  // Head
+  ctx.fillStyle = COLORS.beetle;
+  ctx.fillRect(12, py + 3, 4, 6);
+
+  // Antennae
+  ctx.strokeStyle = COLORS.beetleShell;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(14, py + 3);
+  ctx.lineTo(16, py);
+  ctx.moveTo(14, py + 5);
+  ctx.lineTo(17, py + 2);
+  ctx.stroke();
+
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(13, py + 4, 2, 2);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(14, py + 4, 1, 1);
+
+  // Legs (3 pairs, animated)
+  ctx.fillStyle = COLORS.beetle;
+  ctx.fillRect(3, py + 10 + legAnim, 2, 4);
+  ctx.fillRect(7, py + 10 - legAnim, 2, 4);
+  ctx.fillRect(11, py + 10 + legAnim, 2, 4);
+
+  ctx.restore();
+}
+
+function drawFlameEffect() {
+  if (!player.flameActive) return;
+  const progress = player.flameTimer / 30;
+  const len = 35 * progress;
+
+  for (let i = 0; i < 5; i++) {
+    const t = (frameCount * 0.3 + i * 1.2) % (Math.PI * 2);
+    const spread = Math.sin(t) * 6;
+    const fx = player.facing === 1
+      ? player.x + player.w + i * (len / 5)
+      : player.x - i * (len / 5) - 6;
+    const fy = player.y + 6 + spread;
+    const size = 8 - i;
+
+    ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+    ctx.fillStyle = [COLORS.flame3, COLORS.flame1, COLORS.flame2, COLORS.flame1, COLORS.flame2][i];
+    ctx.fillRect(fx, fy, size, size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFlamethrowerPickup() {
+  const ft = levelData.flamethrower;
+  if (!ft || ft.collected) return;
+
+  const bob = Math.sin(frameCount * 0.08) * 2;
+  const px = ft.x;
+  const py = ft.y + bob;
+
+  // Tank body
+  ctx.fillStyle = COLORS.flamethrower;
+  ctx.fillRect(px - 5, py - 6, 10, 12);
+  // Tank highlight
+  ctx.fillStyle = '#fa0';
+  ctx.fillRect(px - 3, py - 4, 6, 3);
+  // Nozzle
+  ctx.fillStyle = '#888';
+  ctx.fillRect(px + 5, py - 3, 4, 3);
+  // Flame tip
+  ctx.fillStyle = COLORS.flame2;
+  const flicker = Math.sin(frameCount * 0.4) > 0 ? 1 : 0;
+  ctx.fillRect(px + 9, py - 4 - flicker, 3, 3 + flicker);
+}
+
 function drawHUD() {
   ctx.font = '14px "Courier New"';
   ctx.textAlign = 'left';
@@ -1568,6 +1899,16 @@ function drawHUD() {
     ctx.fillRect(10 + i * 18, H - 16, 10, 10);
     ctx.fillStyle = COLORS.playerShirt;
     ctx.fillRect(12 + i * 18, H - 12, 6, 6);
+  }
+
+  // Flamethrower indicator
+  if (player.hasFlamethrower || player.flameActive) {
+    ctx.textAlign = 'right';
+    ctx.font = '11px "Courier New"';
+    ctx.fillStyle = player.flameActive
+      ? (frameCount % 4 < 2 ? COLORS.flame1 : COLORS.flame2)
+      : COLORS.flamethrower;
+    ctx.fillText(player.flameActive ? 'FIRE!' : '[Z/X] FIRE', W - 10, H - 4);
   }
 
   // Dying state
