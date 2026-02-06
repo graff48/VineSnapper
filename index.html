@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Donkey Kong Jr.</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+}
+#gameContainer {
+  position: relative;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+  border: 2px solid #333;
+}
+#overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0,0,0,0.85);
+  color: #fff;
+  z-index: 10;
+}
+#overlay.hidden { display: none; }
+#overlay h1 { font-size: 28px; color: #f44; margin-bottom: 8px; text-transform: uppercase; }
+#overlay h2 { font-size: 18px; color: #ff0; margin-bottom: 20px; }
+#overlay .instructions {
+  font-size: 13px;
+  color: #aaa;
+  text-align: center;
+  line-height: 1.8;
+  margin-bottom: 20px;
+}
+#overlay .start-btn {
+  font-size: 18px;
+  color: #0f0;
+  cursor: pointer;
+  animation: blink 1s infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="game" width="512" height="480"></canvas>
+  <div id="overlay">
+    <h1>Donkey Kong Jr.</h1>
+    <h2>Save Papa!</h2>
+    <div class="instructions">
+      Arrow Keys / WASD - Move &amp; Climb<br>
+      Space - Jump<br>
+      Climb vines to push keys into locks!<br>
+      Avoid the Snapjaws!<br>
+      Collect fruit for bonus points!
+    </div>
+    <div class="start-btn" id="startBtn">PRESS SPACE TO START</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DONKEY KONG JR. - Browser Clone
+// ============================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const W = canvas.width;
+const H = canvas.height;
+
+// ---- CONSTANTS ----
+const GRAVITY = 0.45;
+const PLAYER_SPEED = 2.2;
+const JUMP_FORCE = -6.5;
+const CLIMB_SPEED = 1.8;
+const CLIMB_SPEED_FAST = 2.8;
+const CLIMB_SPEED_DOWN = 2.5;
+const TILE = 16;
+const ENEMY_SPEED = 1.0;
+const KEY_RISE_SPEED = 0.8;
+const ROUND_TIME = 120 * 60; // 2 minutes in frames (60fps)
+
+// ---- GAME STATE ----
+let gameState = 'title'; // title, playing, dying, gameover, winning, levelComplete
+let score = 0;
+let highScore = parseInt(localStorage.getItem('dkjr_high') || '0');
+let lives = 3;
+let level = 1;
+let deathTimer = 0;
+let winTimer = 0;
+let levelCompleteTimer = 0;
+let frameCount = 0;
+let roundTimer = ROUND_TIME;
+
+// ---- INPUT ----
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (gameState === 'title') startGame();
+    else if (gameState === 'gameover') { gameState = 'title'; showOverlay(); }
+  }
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function isLeft() { return keys['ArrowLeft'] || keys['KeyA']; }
+function isRight() { return keys['ArrowRight'] || keys['KeyD']; }
+function isUp() { return keys['ArrowUp'] || keys['KeyW']; }
+function isDown() { return keys['ArrowDown'] || keys['KeyS']; }
+function isJump() { return keys['Space']; }
+
+// ---- COLORS ----
+const COLORS = {
+  bg: '#000',
+  platform: '#c84c0c',
+  platformTop: '#e87040',
+  vine: '#0a0',
+  vineChain: '#888',
+  player: '#f80',
+  playerShirt: '#c00',
+  dk: '#a52',
+  cage: '#aaa',
+  snapjawRed: '#f00',
+  snapjawBlue: '#22f',
+  fruit: '#ff0',
+  key: '#ff0',
+  lock: '#888',
+  text: '#fff',
+  scoreText: '#0ff',
+};
+
+// ---- LEVEL DATA ----
+function buildLevel(lvl) {
+  const platforms = [];
+  const vines = [];
+  const fruits = [];
+  const enemySpawns = [];
+  const lockPositions = [];
+  const keyPositions = [];
+
+  // Ground platform
+  platforms.push({ x: 0, y: H - 32, w: W, h: 16 });
+
+  if (lvl === 1 || (lvl % 3) === 1) {
+    // Level 1 layout - classic vine climbing
+    // Platforms (ascending, staggered)
+    platforms.push({ x: 0, y: H - 100, w: 180, h: 10 });
+    platforms.push({ x: 200, y: H - 100, w: 160, h: 10 });
+    platforms.push({ x: 400, y: H - 100, w: 112, h: 10 });
+
+    platforms.push({ x: 40, y: H - 170, w: 200, h: 10 });
+    platforms.push({ x: 300, y: H - 170, w: 180, h: 10 });
+
+    platforms.push({ x: 0, y: H - 240, w: 160, h: 10 });
+    platforms.push({ x: 220, y: H - 240, w: 150, h: 10 });
+    platforms.push({ x: 410, y: H - 240, w: 102, h: 10 });
+
+    platforms.push({ x: 60, y: H - 310, w: 180, h: 10 });
+    platforms.push({ x: 300, y: H - 310, w: 170, h: 10 });
+
+    // Top platform (DK cage area)
+    platforms.push({ x: 100, y: H - 380, w: 320, h: 10 });
+
+    // Vines connecting platforms
+    // From ground to first tier
+    vines.push({ x: 100, y1: H - 100, y2: H - 32, isChain: false });
+    vines.push({ x: 140, y1: H - 100, y2: H - 32, isChain: false });
+    vines.push({ x: 300, y1: H - 100, y2: H - 32, isChain: true });
+    vines.push({ x: 450, y1: H - 100, y2: H - 32, isChain: false });
+
+    // First to second tier
+    vines.push({ x: 80, y1: H - 170, y2: H - 100, isChain: true });
+    vines.push({ x: 200, y1: H - 170, y2: H - 100, isChain: false });
+    vines.push({ x: 360, y1: H - 170, y2: H - 100, isChain: false });
+    vines.push({ x: 420, y1: H - 170, y2: H - 100, isChain: true });
+
+    // Second to third tier
+    vines.push({ x: 60, y1: H - 240, y2: H - 170, isChain: false });
+    vines.push({ x: 150, y1: H - 240, y2: H - 170, isChain: false });
+    vines.push({ x: 270, y1: H - 240, y2: H - 170, isChain: true });
+    vines.push({ x: 440, y1: H - 240, y2: H - 170, isChain: false });
+
+    // Third to fourth tier
+    vines.push({ x: 120, y1: H - 310, y2: H - 240, isChain: true });
+    vines.push({ x: 240, y1: H - 310, y2: H - 240, isChain: false });
+    vines.push({ x: 350, y1: H - 310, y2: H - 240, isChain: false });
+    vines.push({ x: 430, y1: H - 310, y2: H - 240, isChain: true });
+
+    // Fourth to top
+    vines.push({ x: 180, y1: H - 380, y2: H - 310, isChain: false });
+    vines.push({ x: 260, y1: H - 380, y2: H - 310, isChain: true });
+    vines.push({ x: 340, y1: H - 380, y2: H - 310, isChain: false });
+    vines.push({ x: 400, y1: H - 380, y2: H - 310, isChain: false });
+
+    // Fruits
+    fruits.push({ x: 120, y: H - 140, type: 0, collected: false });
+    fruits.push({ x: 380, y: H - 140, type: 1, collected: false });
+    fruits.push({ x: 200, y: H - 210, type: 2, collected: false });
+    fruits.push({ x: 440, y: H - 280, type: 0, collected: false });
+    fruits.push({ x: 100, y: H - 280, type: 1, collected: false });
+    fruits.push({ x: 300, y: H - 350, type: 2, collected: false });
+
+    // Enemy spawns on vines
+    enemySpawns.push({ vineIdx: 2, y: H - 60, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 7, y: H - 130, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 10, y: H - 200, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 13, y: H - 270, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 15, y: H - 340, dir: -1, type: 'red' });
+
+    // Keys & locks
+    keyPositions.push({ x: 180, y: H - 395, vineIdx: 17, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 340, y: H - 395, vineIdx: 19, locked: true, rising: false, atLock: false });
+
+    lockPositions.push({ x: 180, y: H - 430 });
+    lockPositions.push({ x: 340, y: H - 430 });
+
+  } else if ((lvl % 3) === 2) {
+    // Level 2 layout - more chains, more enemies
+    platforms.push({ x: 0, y: H - 90, w: 140, h: 10 });
+    platforms.push({ x: 180, y: H - 90, w: 140, h: 10 });
+    platforms.push({ x: 370, y: H - 90, w: 142, h: 10 });
+
+    platforms.push({ x: 30, y: H - 160, w: 200, h: 10 });
+    platforms.push({ x: 280, y: H - 160, w: 200, h: 10 });
+
+    platforms.push({ x: 0, y: H - 230, w: 170, h: 10 });
+    platforms.push({ x: 190, y: H - 230, w: 140, h: 10 });
+    platforms.push({ x: 370, y: H - 230, w: 142, h: 10 });
+
+    platforms.push({ x: 50, y: H - 300, w: 420, h: 10 });
+
+    platforms.push({ x: 120, y: H - 370, w: 280, h: 10 });
+
+    // Vines
+    vines.push({ x: 70, y1: H - 90, y2: H - 32, isChain: true });
+    vines.push({ x: 250, y1: H - 90, y2: H - 32, isChain: false });
+    vines.push({ x: 310, y1: H - 90, y2: H - 32, isChain: true });
+    vines.push({ x: 440, y1: H - 90, y2: H - 32, isChain: false });
+
+    vines.push({ x: 100, y1: H - 160, y2: H - 90, isChain: false });
+    vines.push({ x: 180, y1: H - 160, y2: H - 90, isChain: true });
+    vines.push({ x: 340, y1: H - 160, y2: H - 90, isChain: false });
+    vines.push({ x: 450, y1: H - 160, y2: H - 90, isChain: true });
+
+    vines.push({ x: 60, y1: H - 230, y2: H - 160, isChain: true });
+    vines.push({ x: 230, y1: H - 230, y2: H - 160, isChain: false });
+    vines.push({ x: 300, y1: H - 230, y2: H - 160, isChain: false });
+    vines.push({ x: 430, y1: H - 230, y2: H - 160, isChain: true });
+
+    vines.push({ x: 130, y1: H - 300, y2: H - 230, isChain: false });
+    vines.push({ x: 260, y1: H - 300, y2: H - 230, isChain: true });
+    vines.push({ x: 380, y1: H - 300, y2: H - 230, isChain: false });
+
+    vines.push({ x: 200, y1: H - 370, y2: H - 300, isChain: true });
+    vines.push({ x: 300, y1: H - 370, y2: H - 300, isChain: false });
+    vines.push({ x: 370, y1: H - 370, y2: H - 300, isChain: false });
+
+    fruits.push({ x: 70, y: H - 130, type: 0, collected: false });
+    fruits.push({ x: 440, y: H - 130, type: 1, collected: false });
+    fruits.push({ x: 230, y: H - 200, type: 2, collected: false });
+    fruits.push({ x: 130, y: H - 270, type: 0, collected: false });
+    fruits.push({ x: 380, y: H - 270, type: 1, collected: false });
+    fruits.push({ x: 260, y: H - 340, type: 2, collected: false });
+
+    enemySpawns.push({ vineIdx: 0, y: H - 55, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 3, y: H - 55, dir: 1, type: 'red' });
+    enemySpawns.push({ vineIdx: 5, y: H - 120, dir: -1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 7, y: H - 120, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 9, y: H - 190, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 11, y: H - 190, dir: 1, type: 'red' });
+    enemySpawns.push({ vineIdx: 13, y: H - 260, dir: -1, type: 'blue' });
+
+    keyPositions.push({ x: 200, y: H - 385, vineIdx: 15, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 300, y: H - 385, vineIdx: 16, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 370, y: H - 385, vineIdx: 17, locked: true, rising: false, atLock: false });
+
+    lockPositions.push({ x: 200, y: H - 425 });
+    lockPositions.push({ x: 300, y: H - 425 });
+    lockPositions.push({ x: 370, y: H - 425 });
+
+  } else {
+    // Level 3 layout - hardest
+    platforms.push({ x: 20, y: H - 80, w: 200, h: 10 });
+    platforms.push({ x: 290, y: H - 80, w: 200, h: 10 });
+
+    platforms.push({ x: 0, y: H - 145, w: 150, h: 10 });
+    platforms.push({ x: 180, y: H - 145, w: 160, h: 10 });
+    platforms.push({ x: 370, y: H - 145, w: 142, h: 10 });
+
+    platforms.push({ x: 40, y: H - 210, w: 180, h: 10 });
+    platforms.push({ x: 260, y: H - 210, w: 210, h: 10 });
+
+    platforms.push({ x: 0, y: H - 275, w: 160, h: 10 });
+    platforms.push({ x: 200, y: H - 275, w: 120, h: 10 });
+    platforms.push({ x: 360, y: H - 275, w: 152, h: 10 });
+
+    platforms.push({ x: 80, y: H - 340, w: 360, h: 10 });
+
+    platforms.push({ x: 140, y: H - 400, w: 240, h: 10 });
+
+    vines.push({ x: 80, y1: H - 80, y2: H - 32, isChain: false });
+    vines.push({ x: 180, y1: H - 80, y2: H - 32, isChain: true });
+    vines.push({ x: 350, y1: H - 80, y2: H - 32, isChain: false });
+    vines.push({ x: 450, y1: H - 80, y2: H - 32, isChain: true });
+
+    vines.push({ x: 60, y1: H - 145, y2: H - 80, isChain: true });
+    vines.push({ x: 140, y1: H - 145, y2: H - 80, isChain: false });
+    vines.push({ x: 250, y1: H - 145, y2: H - 80, isChain: false });
+    vines.push({ x: 330, y1: H - 145, y2: H - 80, isChain: true });
+    vines.push({ x: 430, y1: H - 145, y2: H - 80, isChain: false });
+
+    vines.push({ x: 90, y1: H - 210, y2: H - 145, isChain: false });
+    vines.push({ x: 200, y1: H - 210, y2: H - 145, isChain: true });
+    vines.push({ x: 310, y1: H - 210, y2: H - 145, isChain: false });
+    vines.push({ x: 420, y1: H - 210, y2: H - 145, isChain: true });
+
+    vines.push({ x: 50, y1: H - 275, y2: H - 210, isChain: true });
+    vines.push({ x: 160, y1: H - 275, y2: H - 210, isChain: false });
+    vines.push({ x: 240, y1: H - 275, y2: H - 210, isChain: false });
+    vines.push({ x: 400, y1: H - 275, y2: H - 210, isChain: true });
+
+    vines.push({ x: 120, y1: H - 340, y2: H - 275, isChain: false });
+    vines.push({ x: 260, y1: H - 340, y2: H - 275, isChain: true });
+    vines.push({ x: 380, y1: H - 340, y2: H - 275, isChain: false });
+
+    vines.push({ x: 200, y1: H - 400, y2: H - 340, isChain: true });
+    vines.push({ x: 280, y1: H - 400, y2: H - 340, isChain: false });
+    vines.push({ x: 350, y1: H - 400, y2: H - 340, isChain: false });
+
+    fruits.push({ x: 180, y: H - 55, type: 0, collected: false });
+    fruits.push({ x: 350, y: H - 55, type: 1, collected: false });
+    fruits.push({ x: 60, y: H - 115, type: 2, collected: false });
+    fruits.push({ x: 430, y: H - 115, type: 0, collected: false });
+    fruits.push({ x: 160, y: H - 180, type: 1, collected: false });
+    fruits.push({ x: 400, y: H - 245, type: 2, collected: false });
+    fruits.push({ x: 120, y: H - 310, type: 0, collected: false });
+    fruits.push({ x: 380, y: H - 310, type: 1, collected: false });
+
+    enemySpawns.push({ vineIdx: 1, y: H - 50, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 3, y: H - 50, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 4, y: H - 110, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 8, y: H - 110, dir: 1, type: 'red' });
+    enemySpawns.push({ vineIdx: 10, y: H - 175, dir: -1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 12, y: H - 175, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 14, y: H - 240, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 16, y: H - 240, dir: 1, type: 'red' });
+
+    keyPositions.push({ x: 200, y: H - 415, vineIdx: 20, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 280, y: H - 415, vineIdx: 21, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 350, y: H - 415, vineIdx: 22, locked: true, rising: false, atLock: false });
+
+    lockPositions.push({ x: 200, y: H - 450 });
+    lockPositions.push({ x: 280, y: H - 450 });
+    lockPositions.push({ x: 350, y: H - 450 });
+  }
+
+  return { platforms, vines, fruits, enemySpawns, lockPositions, keyPositions };
+}
+
+// ---- PLAYER ----
+let player = {};
+function resetPlayer() {
+  player = {
+    x: 50, y: H - 48,
+    w: 16, h: 20,
+    vx: 0, vy: 0,
+    onGround: false,
+    climbing: false,
+    climbVine: -1,
+    nearbyVines: [],
+    facing: 1,
+    animFrame: 0,
+    animTimer: 0,
+    jumpPressed: false,
+    invincible: 0,
+  };
+  roundTimer = ROUND_TIME;
+}
+
+// ---- LEVEL STATE ----
+let levelData = {};
+let enemies = [];
+let particles = [];
+let scorePopups = [];
+let enemySpawnTimer = 0;
+
+function initLevel() {
+  levelData = buildLevel(level);
+  enemies = [];
+  particles = [];
+  scorePopups = [];
+  enemySpawnTimer = 0;
+  roundTimer = ROUND_TIME;
+  resetPlayer();
+
+  // Reset keys
+  levelData.keyPositions.forEach(k => {
+    k.locked = true;
+    k.rising = false;
+    k.atLock = false;
+  });
+
+  // Reset fruits
+  levelData.fruits.forEach(f => f.collected = false);
+}
+
+// ---- AUDIO (simple synth) ----
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playSound(type) {
+  try {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const t = audioCtx.currentTime;
+
+    switch(type) {
+      case 'jump':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.linearRampToValueAtTime(600, t + 0.15);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.15);
+        osc.start(t); osc.stop(t + 0.15);
+        break;
+      case 'climb':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(300 + (frameCount % 2) * 100, t);
+        gain.gain.setValueAtTime(0.05, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.05);
+        osc.start(t); osc.stop(t + 0.05);
+        break;
+      case 'fruit':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, t);
+        osc.frequency.linearRampToValueAtTime(1200, t + 0.1);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.15);
+        osc.start(t); osc.stop(t + 0.15);
+        break;
+      case 'key':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, t);
+        osc.frequency.linearRampToValueAtTime(800, t + 0.2);
+        osc.frequency.linearRampToValueAtTime(1000, t + 0.4);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.4);
+        osc.start(t); osc.stop(t + 0.4);
+        break;
+      case 'die':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(400, t);
+        osc.frequency.linearRampToValueAtTime(100, t + 0.5);
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.5);
+        osc.start(t); osc.stop(t + 0.5);
+        break;
+      case 'win':
+        osc.type = 'square';
+        [400,500,600,800].forEach((f, i) => {
+          osc.frequency.setValueAtTime(f, t + i * 0.15);
+        });
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.6);
+        osc.start(t); osc.stop(t + 0.6);
+        break;
+    }
+  } catch(e) {}
+}
+
+// ---- GAME FUNCTIONS ----
+function showOverlay() {
+  overlay.classList.remove('hidden');
+  const btn = document.getElementById('startBtn');
+  if (gameState === 'gameover') {
+    document.querySelector('#overlay h1').textContent = 'GAME OVER';
+    document.querySelector('#overlay h2').textContent = `Score: ${score}`;
+    btn.textContent = 'PRESS SPACE TO CONTINUE';
+  } else {
+    document.querySelector('#overlay h1').textContent = 'DONKEY KONG JR.';
+    document.querySelector('#overlay h2').textContent = 'Save Papa!';
+    btn.textContent = 'PRESS SPACE TO START';
+  }
+}
+
+function startGame() {
+  overlay.classList.add('hidden');
+  gameState = 'playing';
+  score = 0;
+  lives = 3;
+  level = 1;
+  initLevel();
+}
+
+function playerDie() {
+  if (player.invincible > 0) return;
+  gameState = 'dying';
+  deathTimer = 90;
+  lives--;
+  playSound('die');
+  // Death particles
+  for (let i = 0; i < 15; i++) {
+    particles.push({
+      x: player.x + player.w/2,
+      y: player.y + player.h/2,
+      vx: (Math.random() - 0.5) * 5,
+      vy: (Math.random() - 0.5) * 5 - 2,
+      life: 40 + Math.random() * 20,
+      color: Math.random() > 0.5 ? COLORS.player : COLORS.playerShirt,
+    });
+  }
+}
+
+function addScorePopup(x, y, pts) {
+  scorePopups.push({ x, y, pts, life: 60 });
+  score += pts;
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('dkjr_high', highScore.toString());
+  }
+}
+
+// ---- COLLISION ----
+function rectOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function isOnPlatform(entity) {
+  for (const p of levelData.platforms) {
+    if (entity.x + entity.w > p.x && entity.x < p.x + p.w) {
+      if (entity.y + entity.h >= p.y && entity.y + entity.h <= p.y + 8 && entity.vy >= 0) {
+        return p;
+      }
+    }
+  }
+  return null;
+}
+
+function getNearbyVines(entity) {
+  const result = [];
+  for (let i = 0; i < levelData.vines.length; i++) {
+    const v = levelData.vines[i];
+    const cx = entity.x + entity.w / 2;
+    if (Math.abs(cx - v.x) < 14 && entity.y + entity.h > v.y1 && entity.y < v.y2) {
+      result.push(i);
+    }
+  }
+  return result;
+}
+
+// ---- UPDATE ----
+function update() {
+  frameCount++;
+
+  if (gameState === 'dying') {
+    deathTimer--;
+    updateParticles();
+    if (deathTimer <= 0) {
+      if (lives <= 0) {
+        gameState = 'gameover';
+        showOverlay();
+      } else {
+        gameState = 'playing';
+        resetPlayer();
+      }
+    }
+    return;
+  }
+
+  if (gameState === 'levelComplete') {
+    levelCompleteTimer--;
+    updateParticles();
+    if (levelCompleteTimer <= 0) {
+      level++;
+      initLevel();
+      gameState = 'playing';
+    }
+    return;
+  }
+
+  if (gameState === 'winning') {
+    winTimer--;
+    updateParticles();
+    if (winTimer <= 0) {
+      gameState = 'levelComplete';
+      levelCompleteTimer = 90;
+      addScorePopup(W/2, H/2, 1000 + level * 500);
+    }
+    return;
+  }
+
+  if (gameState !== 'playing') return;
+
+  // Round timer
+  roundTimer--;
+  if (roundTimer <= 0) {
+    roundTimer = 0;
+    playerDie();
+    return;
+  }
+
+  // Player invincibility
+  if (player.invincible > 0) player.invincible--;
+
+  // Animation
+  player.animTimer++;
+  if (player.animTimer > 8) {
+    player.animTimer = 0;
+    player.animFrame = (player.animFrame + 1) % 4;
+  }
+
+  // Find nearby vines
+  player.nearbyVines = getNearbyVines(player);
+
+  if (player.climbing) {
+    // CLIMBING LOGIC
+    let climbSpeed = CLIMB_SPEED;
+    if (player.nearbyVines.length >= 2) climbSpeed = CLIMB_SPEED_FAST;
+
+    if (isUp()) {
+      player.y -= climbSpeed;
+      if (frameCount % 8 === 0) playSound('climb');
+    }
+    if (isDown()) {
+      player.y += CLIMB_SPEED_DOWN;
+      if (frameCount % 8 === 0) playSound('climb');
+    }
+
+    // Stay on vine
+    if (player.climbVine >= 0 && player.climbVine < levelData.vines.length) {
+      const v = levelData.vines[player.climbVine];
+      player.x = v.x - player.w / 2;
+
+      // Reached top of vine
+      if (player.y + player.h <= v.y1 + 2) {
+        player.y = v.y1 - player.h;
+        player.climbing = false;
+        player.climbVine = -1;
+        player.onGround = true;
+      }
+      // Reached bottom of vine
+      if (player.y + player.h >= v.y2) {
+        player.y = v.y2 - player.h;
+        player.climbing = false;
+        player.climbVine = -1;
+      }
+    }
+
+    // Jump off vine
+    if (isJump() && !player.jumpPressed) {
+      player.climbing = false;
+      player.climbVine = -1;
+      player.vy = JUMP_FORCE * 0.7;
+      if (isLeft()) player.vx = -PLAYER_SPEED;
+      else if (isRight()) player.vx = PLAYER_SPEED;
+      player.jumpPressed = true;
+      playSound('jump');
+    }
+
+    // Left/right to switch vines or dismount
+    if (isLeft() && !player.climbing) { player.vx = -PLAYER_SPEED; }
+    if (isRight() && !player.climbing) { player.vx = PLAYER_SPEED; }
+
+  } else {
+    // WALKING / FALLING LOGIC
+    player.vx = 0;
+    if (isLeft()) { player.vx = -PLAYER_SPEED; player.facing = -1; }
+    if (isRight()) { player.vx = PLAYER_SPEED; player.facing = 1; }
+
+    // Jump
+    if (isJump() && player.onGround && !player.jumpPressed) {
+      player.vy = JUMP_FORCE;
+      player.onGround = false;
+      player.jumpPressed = true;
+      playSound('jump');
+    }
+
+    // Grab vine
+    if ((isUp() || isDown()) && player.nearbyVines.length > 0 && !player.onGround) {
+      player.climbing = true;
+      player.climbVine = player.nearbyVines[0];
+      player.vy = 0;
+      player.vx = 0;
+    }
+    // Also grab vine while on ground if pressing up
+    if (isUp() && player.nearbyVines.length > 0 && player.onGround) {
+      player.climbing = true;
+      player.climbVine = player.nearbyVines[0];
+      player.vy = 0;
+      player.vx = 0;
+      player.onGround = false;
+    }
+
+    // Apply gravity
+    if (!player.onGround) {
+      player.vy += GRAVITY;
+      if (player.vy > 8) player.vy = 8;
+    }
+
+    // Move
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // Platform collision
+    const plat = isOnPlatform(player);
+    if (plat) {
+      player.y = plat.y - player.h;
+      player.vy = 0;
+      player.onGround = true;
+    } else if (!player.climbing) {
+      player.onGround = false;
+    }
+
+    // Screen bounds
+    if (player.x < 0) player.x = 0;
+    if (player.x + player.w > W) player.x = W - player.w;
+
+    // Fall off screen
+    if (player.y > H + 20) {
+      playerDie();
+      return;
+    }
+  }
+
+  // Release jump
+  if (!isJump()) player.jumpPressed = false;
+
+  // ---- ENEMIES ----
+  enemySpawnTimer++;
+  const spawnInterval = Math.max(120, 300 - level * 30);
+  if (enemySpawnTimer >= spawnInterval && enemies.length < levelData.enemySpawns.length + 2) {
+    // Spawn enemy on a vine
+    const spawn = levelData.enemySpawns[Math.floor(Math.random() * levelData.enemySpawns.length)];
+    if (spawn && spawn.vineIdx < levelData.vines.length) {
+      const v = levelData.vines[spawn.vineIdx];
+      enemies.push({
+        x: v.x - 8,
+        y: spawn.dir === -1 ? v.y2 : v.y1,
+        w: 16, h: 16,
+        vineIdx: spawn.vineIdx,
+        dir: spawn.dir,
+        type: spawn.type,
+        speed: ENEMY_SPEED + (level - 1) * 0.15,
+        animFrame: 0,
+      });
+      enemySpawnTimer = 0;
+    }
+  }
+
+  // Update enemies
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    const v = levelData.vines[e.vineIdx];
+    if (!v) { enemies.splice(i, 1); continue; }
+
+    e.y += e.dir * e.speed;
+    e.x = v.x - 8;
+    e.animFrame = (e.animFrame + 0.1) % 2;
+
+    // Remove if off vine
+    if (e.y < v.y1 - 20 || e.y > v.y2 + 20) {
+      enemies.splice(i, 1);
+      continue;
+    }
+
+    // Check collision with player
+    if (player.invincible <= 0 && rectOverlap(player, e)) {
+      // If player is above and falling, kill enemy
+      if (player.vy > 0 && player.y + player.h - 8 < e.y + e.h / 2) {
+        enemies.splice(i, 1);
+        addScorePopup(e.x, e.y, 200);
+        player.vy = JUMP_FORCE * 0.6;
+        playSound('fruit');
+      } else {
+        playerDie();
+        return;
+      }
+    }
+  }
+
+  // ---- FRUITS ----
+  for (const f of levelData.fruits) {
+    if (f.collected) continue;
+    if (rectOverlap(player, { x: f.x - 8, y: f.y - 8, w: 16, h: 16 })) {
+      f.collected = true;
+      addScorePopup(f.x, f.y, 400);
+      playSound('fruit');
+      // Drop fruit particles
+      for (let i = 0; i < 6; i++) {
+        particles.push({
+          x: f.x, y: f.y,
+          vx: (Math.random() - 0.5) * 3,
+          vy: -Math.random() * 3,
+          life: 30,
+          color: ['#ff0', '#f80', '#f00'][f.type],
+        });
+      }
+      // Fruit drops down and kills enemies below
+      for (let j = enemies.length - 1; j >= 0; j--) {
+        const e = enemies[j];
+        if (Math.abs(e.x + 8 - f.x) < 20 && e.y > f.y && e.y - f.y < 80) {
+          enemies.splice(j, 1);
+          addScorePopup(e.x, e.y, 300);
+        }
+      }
+    }
+  }
+
+  // ---- KEYS ----
+  for (let ki = 0; ki < levelData.keyPositions.length; ki++) {
+    const k = levelData.keyPositions[ki];
+    if (k.atLock) continue;
+
+    if (k.rising) {
+      k.y -= KEY_RISE_SPEED;
+      const lock = levelData.lockPositions[ki];
+      if (lock && k.y <= lock.y) {
+        k.y = lock.y;
+        k.atLock = true;
+        k.locked = false;
+        playSound('key');
+        addScorePopup(k.x, k.y, 500);
+
+        // Check if all keys are in locks
+        if (levelData.keyPositions.every(kk => kk.atLock)) {
+          gameState = 'winning';
+          winTimer = 120;
+          playSound('win');
+          // Victory particles
+          for (let i = 0; i < 30; i++) {
+            particles.push({
+              x: W / 2 + (Math.random() - 0.5) * 200,
+              y: 60,
+              vx: (Math.random() - 0.5) * 4,
+              vy: Math.random() * 3 + 1,
+              life: 80 + Math.random() * 40,
+              color: ['#ff0', '#f00', '#0f0', '#0ff', '#f0f'][Math.floor(Math.random() * 5)],
+            });
+          }
+        }
+      }
+    } else if (k.locked) {
+      // Check if player is pushing key up
+      if (player.climbing && k.vineIdx < levelData.vines.length) {
+        const v = levelData.vines[k.vineIdx];
+        if (player.climbVine === k.vineIdx ||
+            (player.nearbyVines.includes(k.vineIdx))) {
+          if (player.y < k.y + 10 && player.y > k.y - 20 && isUp()) {
+            k.rising = true;
+            playSound('key');
+          }
+        }
+      }
+    }
+  }
+
+  // Update particles
+  updateParticles();
+
+  // Update score popups
+  for (let i = scorePopups.length - 1; i >= 0; i--) {
+    scorePopups[i].y -= 1;
+    scorePopups[i].life--;
+    if (scorePopups[i].life <= 0) scorePopups.splice(i, 1);
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.1;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ---- DRAWING ----
+function draw() {
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw platforms
+  for (const p of levelData.platforms) {
+    // Platform body
+    ctx.fillStyle = COLORS.platform;
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+    // Top highlight
+    ctx.fillStyle = COLORS.platformTop;
+    ctx.fillRect(p.x, p.y, p.w, 3);
+    // Brick pattern
+    ctx.fillStyle = '#a03008';
+    for (let bx = p.x; bx < p.x + p.w; bx += 16) {
+      ctx.fillRect(bx + 7, p.y + 3, 2, p.h - 3);
+    }
+  }
+
+  // Draw vines
+  for (const v of levelData.vines) {
+    if (v.isChain) {
+      // Chain style
+      ctx.strokeStyle = COLORS.vineChain;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let y = v.y1; y < v.y2; y += 8) {
+        const ox = (Math.floor(y / 8) % 2) * 3 - 1.5;
+        ctx.moveTo(v.x + ox, y);
+        ctx.lineTo(v.x - ox, y + 8);
+      }
+      ctx.stroke();
+    } else {
+      // Vine style
+      ctx.strokeStyle = COLORS.vine;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(v.x, v.y1);
+      ctx.lineTo(v.x, v.y2);
+      ctx.stroke();
+      // Leaves
+      ctx.fillStyle = '#0d0';
+      for (let y = v.y1 + 15; y < v.y2 - 10; y += 25) {
+        const side = (Math.floor(y / 25) % 2) * 2 - 1;
+        ctx.beginPath();
+        ctx.ellipse(v.x + side * 6, y, 5, 3, side * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // Draw fruits
+  for (const f of levelData.fruits) {
+    if (f.collected) continue;
+    const colors = ['#ff0', '#f80', '#f44'];
+    ctx.fillStyle = colors[f.type];
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#070';
+    ctx.fillRect(f.x - 1, f.y - 9, 2, 4);
+  }
+
+  // Draw DK and cage at top
+  drawDKCage();
+
+  // Draw locks
+  for (let i = 0; i < levelData.lockPositions.length; i++) {
+    const lock = levelData.lockPositions[i];
+    const key = levelData.keyPositions[i];
+    // Lock body
+    ctx.fillStyle = key.atLock ? '#0f0' : COLORS.lock;
+    ctx.fillRect(lock.x - 8, lock.y - 4, 16, 12);
+    ctx.fillStyle = key.atLock ? '#080' : '#666';
+    ctx.beginPath();
+    ctx.arc(lock.x, lock.y - 4, 8, Math.PI, 0);
+    ctx.fill();
+    // Keyhole
+    if (!key.atLock) {
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(lock.x, lock.y + 2, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Draw keys
+  for (const k of levelData.keyPositions) {
+    if (k.atLock) continue;
+    ctx.fillStyle = COLORS.key;
+    // Key head
+    ctx.beginPath();
+    ctx.arc(k.x, k.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Key shaft
+    ctx.fillRect(k.x - 1.5, k.y + 5, 3, 10);
+    // Key teeth
+    ctx.fillRect(k.x + 1.5, k.y + 10, 4, 2);
+    ctx.fillRect(k.x + 1.5, k.y + 14, 4, 2);
+  }
+
+  // Draw enemies
+  for (const e of enemies) {
+    drawSnapjaw(e);
+  }
+
+  // Draw player (if alive)
+  if (gameState !== 'dying' || deathTimer > 60) {
+    drawPlayer();
+  }
+
+  // Draw particles
+  for (const p of particles) {
+    ctx.globalAlpha = p.life / 60;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+
+  // Draw score popups
+  ctx.font = '12px "Courier New"';
+  for (const sp of scorePopups) {
+    ctx.globalAlpha = sp.life / 60;
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(sp.pts.toString(), sp.x, sp.y);
+  }
+  ctx.globalAlpha = 1;
+
+  // HUD
+  drawHUD();
+
+  // Level complete text
+  if (gameState === 'levelComplete') {
+    ctx.font = 'bold 24px "Courier New"';
+    ctx.fillStyle = '#ff0';
+    ctx.textAlign = 'center';
+    ctx.fillText(`LEVEL ${level} COMPLETE!`, W / 2, H / 2 - 20);
+    ctx.font = '16px "Courier New"';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`Bonus: ${1000 + level * 500}`, W / 2, H / 2 + 10);
+  }
+
+  // Winning text
+  if (gameState === 'winning') {
+    ctx.font = 'bold 20px "Courier New"';
+    ctx.fillStyle = '#0f0';
+    ctx.textAlign = 'center';
+    ctx.fillText('PAPA IS FREE!', W / 2, H / 2);
+  }
+}
+
+function drawDKCage() {
+  const cx = W / 2;
+  const cy = 35;
+  const allFreed = levelData.keyPositions.every(k => k.atLock);
+
+  // Cage
+  if (!allFreed) {
+    ctx.strokeStyle = COLORS.cage;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - 30, cy - 20, 60, 40);
+    // Bars
+    for (let bx = cx - 24; bx <= cx + 24; bx += 8) {
+      ctx.beginPath();
+      ctx.moveTo(bx, cy - 20);
+      ctx.lineTo(bx, cy + 20);
+      ctx.stroke();
+    }
+  }
+
+  // DK
+  ctx.fillStyle = COLORS.dk;
+  // Body
+  ctx.fillRect(cx - 10, cy - 10, 20, 18);
+  // Head
+  ctx.fillRect(cx - 8, cy - 18, 16, 10);
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx - 5, cy - 15, 4, 4);
+  ctx.fillRect(cx + 1, cy - 15, 4, 4);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(cx - 4, cy - 14, 2, 2);
+  ctx.fillRect(cx + 2, cy - 14, 2, 2);
+  // Mouth
+  ctx.fillStyle = '#a00';
+  ctx.fillRect(cx - 4, cy - 10, 8, 3);
+
+  if (allFreed) {
+    // Happy DK - arms up
+    ctx.fillStyle = COLORS.dk;
+    ctx.fillRect(cx - 18, cy - 16, 6, 10);
+    ctx.fillRect(cx + 12, cy - 16, 6, 10);
+  } else {
+    // Sad DK - arms at sides
+    ctx.fillStyle = COLORS.dk;
+    ctx.fillRect(cx - 14, cy - 4, 4, 12);
+    ctx.fillRect(cx + 10, cy - 4, 4, 12);
+  }
+}
+
+function drawPlayer() {
+  const px = player.x;
+  const py = player.y;
+  const flash = player.invincible > 0 && Math.floor(frameCount / 3) % 2;
+  if (flash) return;
+
+  ctx.save();
+  if (player.facing === -1 && !player.climbing) {
+    ctx.translate(px + player.w, 0);
+    ctx.scale(-1, 1);
+    ctx.translate(0, 0);
+  } else {
+    ctx.translate(px, 0);
+  }
+
+  if (player.climbing) {
+    // Climbing pose
+    const sway = Math.sin(frameCount * 0.15) * 2;
+    // Body
+    ctx.fillStyle = COLORS.playerShirt;
+    ctx.fillRect(2, py + 4, 12, 10);
+    // Head
+    ctx.fillStyle = COLORS.player;
+    ctx.fillRect(3, py, 10, 8);
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(5, py + 2, 3, 3);
+    ctx.fillRect(9, py + 2, 3, 3);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(6, py + 3, 2, 2);
+    ctx.fillRect(10, py + 3, 2, 2);
+    // Arms (reaching up alternating)
+    ctx.fillStyle = COLORS.player;
+    ctx.fillRect(0 + sway, py + 2, 4, 3);
+    ctx.fillRect(12 - sway, py + 5, 4, 3);
+    // Legs
+    ctx.fillRect(3, py + 14, 4, 6);
+    ctx.fillRect(9, py + 14, 4, 6);
+  } else {
+    // Walking/standing pose
+    const walk = player.vx !== 0 ? Math.sin(frameCount * 0.3) * 3 : 0;
+    // Body
+    ctx.fillStyle = COLORS.playerShirt;
+    ctx.fillRect(2, py + 6, 12, 8);
+    // Head
+    ctx.fillStyle = COLORS.player;
+    ctx.fillRect(3, py, 10, 9);
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(7, py + 2, 3, 3);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(8, py + 3, 2, 2);
+    // Nose
+    ctx.fillStyle = COLORS.player;
+    ctx.fillRect(11, py + 4, 3, 2);
+    // Arms
+    ctx.fillStyle = COLORS.player;
+    ctx.fillRect(-1, py + 7 + walk, 3, 5);
+    ctx.fillRect(14, py + 7 - walk, 3, 5);
+    // Legs
+    ctx.fillStyle = '#22a';
+    ctx.fillRect(3, py + 14 + walk, 5, 6);
+    ctx.fillRect(8, py + 14 - walk, 5, 6);
+
+    // Jump pose modification
+    if (!player.onGround && !player.climbing) {
+      ctx.fillStyle = COLORS.player;
+      ctx.fillRect(-1, py + 3, 3, 5);
+      ctx.fillRect(14, py + 3, 3, 5);
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawSnapjaw(e) {
+  const px = e.x;
+  const py = e.y;
+  const frame = Math.floor(e.animFrame);
+  const color = e.type === 'red' ? COLORS.snapjawRed : COLORS.snapjawBlue;
+
+  // Body
+  ctx.fillStyle = color;
+  ctx.fillRect(px + 2, py + 3, 12, 10);
+
+  // Jaw (opens and closes)
+  ctx.fillRect(px + 1, py + (frame === 0 ? 1 : 0), 14, 5);
+  ctx.fillRect(px + 1, py + 11 + (frame === 0 ? 1 : 2), 14, 4);
+
+  // Teeth
+  ctx.fillStyle = '#fff';
+  if (frame === 1) {
+    ctx.fillRect(px + 3, py + 5, 2, 2);
+    ctx.fillRect(px + 7, py + 5, 2, 2);
+    ctx.fillRect(px + 11, py + 5, 2, 2);
+    ctx.fillRect(px + 3, py + 11, 2, 2);
+    ctx.fillRect(px + 7, py + 11, 2, 2);
+    ctx.fillRect(px + 11, py + 11, 2, 2);
+  }
+
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(px + 4, py + 1, 3, 3);
+  ctx.fillRect(px + 9, py + 1, 3, 3);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(px + 5, py + 2, 2, 2);
+  ctx.fillRect(px + 10, py + 2, 2, 2);
+}
+
+function drawHUD() {
+  ctx.font = '14px "Courier New"';
+  ctx.textAlign = 'left';
+
+  // Score
+  ctx.fillStyle = '#888';
+  ctx.fillText('SCORE', 10, 16);
+  ctx.fillStyle = COLORS.scoreText;
+  ctx.fillText(score.toString().padStart(6, '0'), 10, 30);
+
+  // High score
+  ctx.fillStyle = '#888';
+  ctx.textAlign = 'center';
+  ctx.fillText('HIGH', W / 2, 16);
+  ctx.fillStyle = COLORS.scoreText;
+  ctx.fillText(highScore.toString().padStart(6, '0'), W / 2, 30);
+
+  // Level
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#888';
+  ctx.fillText('LEVEL', W - 10, 16);
+  ctx.fillStyle = '#ff0';
+  ctx.fillText(level.toString(), W - 10, 30);
+
+  // Timer
+  const totalSecs = Math.ceil(roundTimer / 60);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
+  const timeStr = mins + ':' + secs.toString().padStart(2, '0');
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#888';
+  ctx.fillText('TIME', W / 2, H - 16);
+  ctx.fillStyle = totalSecs <= 30 ? (Math.floor(frameCount / 15) % 2 ? '#f00' : '#ff0') : '#fff';
+  ctx.fillText(timeStr, W / 2, H - 4);
+
+  // Lives
+  ctx.textAlign = 'left';
+  for (let i = 0; i < lives; i++) {
+    ctx.fillStyle = COLORS.player;
+    ctx.fillRect(10 + i * 18, H - 16, 10, 10);
+    ctx.fillStyle = COLORS.playerShirt;
+    ctx.fillRect(12 + i * 18, H - 12, 6, 6);
+  }
+
+  // Dying state
+  if (gameState === 'dying') {
+    ctx.font = 'bold 20px "Courier New"';
+    ctx.fillStyle = '#f00';
+    ctx.textAlign = 'center';
+    if (lives <= 0) {
+      ctx.fillText('GAME OVER', W / 2, H / 2);
+    } else {
+      ctx.fillText('OUCH!', W / 2, H / 2);
+    }
+  }
+}
+
+// ---- GAME LOOP ----
+function gameLoop() {
+  update();
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// ---- START ----
+initLevel();
+showOverlay();
+gameLoop();
+</script>
+</body>
+</html>
