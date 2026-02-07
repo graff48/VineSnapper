@@ -202,11 +202,35 @@ const LEVEL_PALETTES = [
     flame2: '#ff4',
     flame3: '#f66',
   },
+  { // Level 4: Volcanic depths - fiery reds and dark rock
+    bg: '#1a0800',
+    platform: '#8a3010',
+    platformTop: '#c05020',
+    vine: '#c90',
+    vineChain: '#a86',
+    player: '#0ff',
+    playerShirt: '#08a',
+    dk: '#b74',
+    cage: '#ca8',
+    snapjawRed: '#f62',
+    snapjawBlue: '#a0f',
+    fruit: '#0f0',
+    key: '#0f0',
+    lock: '#a86',
+    text: '#fda',
+    scoreText: '#ff4',
+    beetle: '#6a2020',
+    beetleShell: '#a04030',
+    flamethrower: '#ff0',
+    flame1: '#f40',
+    flame2: '#fa0',
+    flame3: '#f00',
+  },
 ];
 let COLORS = { ...LEVEL_PALETTES[0] };
 
 function applyLevelPalette(lvl) {
-  const idx = ((lvl - 1) % 3);
+  const idx = ((lvl - 1) % 4);
   Object.assign(COLORS, LEVEL_PALETTES[idx]);
 }
 
@@ -224,7 +248,9 @@ function buildLevel(lvl) {
   // Ground platform
   platforms.push({ x: 0, y: H - 32, w: W, h: 16 });
 
-  if (lvl === 1 || (lvl % 3) === 1) {
+  const lvlMod = ((lvl - 1) % 4) + 1;
+
+  if (lvlMod === 1) {
     // Level 1 layout - classic vine climbing
     // Platforms (ascending, staggered)
     platforms.push({ x: 0, y: H - 100, w: 180, h: 10 });
@@ -305,7 +331,7 @@ function buildLevel(lvl) {
     // Flamethrower pickup on second tier platform
     flamethrower = { x: 160, y: H - 180, collected: false };
 
-  } else if ((lvl % 3) === 2) {
+  } else if (lvlMod === 2) {
     // Level 2 layout - more chains, more enemies
     platforms.push({ x: 0, y: H - 90, w: 140, h: 10 });
     platforms.push({ x: 180, y: H - 90, w: 140, h: 10 });
@@ -378,8 +404,8 @@ function buildLevel(lvl) {
     // Flamethrower pickup
     flamethrower = { x: 350, y: H - 170, collected: false };
 
-  } else {
-    // Level 3 layout - hardest
+  } else if (lvlMod === 3) {
+    // Level 3 layout - frozen sky
     platforms.push({ x: 20, y: H - 80, w: 200, h: 10 });
     platforms.push({ x: 290, y: H - 80, w: 200, h: 10 });
 
@@ -462,6 +488,109 @@ function buildLevel(lvl) {
 
     // Flamethrower pickup
     flamethrower = { x: 300, y: H - 220, collected: false };
+
+  } else {
+    // Level 4 layout - volcanic depths, many narrow platforms, heavy enemies
+    // Tier 1 - three small platforms
+    platforms.push({ x: 0, y: H - 85, w: 130, h: 10 });      // idx 1
+    platforms.push({ x: 170, y: H - 85, w: 130, h: 10 });     // idx 2
+    platforms.push({ x: 350, y: H - 95, w: 162, h: 10 });     // idx 3 (slightly higher)
+
+    // Tier 2 - offset platforms
+    platforms.push({ x: 60, y: H - 155, w: 160, h: 10 });     // idx 4
+    platforms.push({ x: 280, y: H - 150, w: 170, h: 10 });    // idx 5
+
+    // Tier 3 - three narrow ledges
+    platforms.push({ x: 0, y: H - 215, w: 120, h: 10 });      // idx 6
+    platforms.push({ x: 160, y: H - 220, w: 110, h: 10 });    // idx 7
+    platforms.push({ x: 340, y: H - 225, w: 172, h: 10 });    // idx 8
+
+    // Tier 4 - two platforms
+    platforms.push({ x: 30, y: H - 290, w: 200, h: 10 });     // idx 9
+    platforms.push({ x: 290, y: H - 285, w: 190, h: 10 });    // idx 10
+
+    // Tier 5 - long bridge
+    platforms.push({ x: 60, y: H - 350, w: 400, h: 10 });     // idx 11
+
+    // Top platform (DK cage)
+    platforms.push({ x: 120, y: H - 410, w: 280, h: 10 });    // idx 12
+
+    // Vines: ground to tier 1
+    vines.push({ x: 60, y1: H - 85, y2: H - 32, isChain: false });   // 0
+    vines.push({ x: 200, y1: H - 85, y2: H - 32, isChain: true });   // 1
+    vines.push({ x: 290, y1: H - 85, y2: H - 32, isChain: false });  // 2
+    vines.push({ x: 410, y1: H - 95, y2: H - 32, isChain: true });   // 3
+    vines.push({ x: 480, y1: H - 95, y2: H - 32, isChain: false });  // 4
+
+    // Tier 1 to tier 2
+    vines.push({ x: 100, y1: H - 155, y2: H - 85, isChain: true });  // 5
+    vines.push({ x: 190, y1: H - 155, y2: H - 85, isChain: false }); // 6
+    vines.push({ x: 330, y1: H - 150, y2: H - 95, isChain: false }); // 7
+    vines.push({ x: 430, y1: H - 150, y2: H - 95, isChain: true });  // 8
+
+    // Tier 2 to tier 3
+    vines.push({ x: 70, y1: H - 215, y2: H - 155, isChain: false }); // 9
+    vines.push({ x: 200, y1: H - 220, y2: H - 155, isChain: true }); // 10
+    vines.push({ x: 290, y1: H - 220, y2: H - 150, isChain: false }); // 11
+    vines.push({ x: 440, y1: H - 225, y2: H - 150, isChain: true }); // 12
+
+    // Tier 3 to tier 4
+    vines.push({ x: 50, y1: H - 290, y2: H - 215, isChain: true });  // 13
+    vines.push({ x: 170, y1: H - 290, y2: H - 220, isChain: false }); // 14
+    vines.push({ x: 340, y1: H - 285, y2: H - 225, isChain: false }); // 15
+    vines.push({ x: 460, y1: H - 285, y2: H - 225, isChain: true });  // 16
+
+    // Tier 4 to tier 5
+    vines.push({ x: 110, y1: H - 350, y2: H - 290, isChain: false }); // 17
+    vines.push({ x: 250, y1: H - 350, y2: H - 290, isChain: true });  // 18
+    vines.push({ x: 380, y1: H - 350, y2: H - 285, isChain: false }); // 19
+
+    // Tier 5 to top
+    vines.push({ x: 180, y1: H - 410, y2: H - 350, isChain: true });  // 20
+    vines.push({ x: 270, y1: H - 410, y2: H - 350, isChain: false }); // 21
+    vines.push({ x: 360, y1: H - 410, y2: H - 350, isChain: false }); // 22
+
+    // Fruits scattered throughout
+    fruits.push({ x: 60, y: H - 55, type: 0, collected: false });
+    fruits.push({ x: 410, y: H - 55, type: 1, collected: false });
+    fruits.push({ x: 190, y: H - 120, type: 2, collected: false });
+    fruits.push({ x: 330, y: H - 120, type: 0, collected: false });
+    fruits.push({ x: 70, y: H - 185, type: 1, collected: false });
+    fruits.push({ x: 440, y: H - 190, type: 2, collected: false });
+    fruits.push({ x: 170, y: H - 260, type: 0, collected: false });
+    fruits.push({ x: 380, y: H - 255, type: 1, collected: false });
+    fruits.push({ x: 250, y: H - 320, type: 2, collected: false });
+
+    // Lots of enemy spawns — hardest level
+    enemySpawns.push({ vineIdx: 1, y: H - 55, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 4, y: H - 55, dir: 1, type: 'red' });
+    enemySpawns.push({ vineIdx: 5, y: H - 115, dir: -1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 8, y: H - 115, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 10, y: H - 185, dir: -1, type: 'red' });
+    enemySpawns.push({ vineIdx: 12, y: H - 185, dir: 1, type: 'red' });
+    enemySpawns.push({ vineIdx: 13, y: H - 250, dir: -1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 16, y: H - 250, dir: 1, type: 'blue' });
+    enemySpawns.push({ vineIdx: 18, y: H - 315, dir: -1, type: 'red' });
+
+    // 4 keys — hardest to unlock
+    keyPositions.push({ x: 180, y: H - 425, vineIdx: 20, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 270, y: H - 425, vineIdx: 21, locked: true, rising: false, atLock: false });
+    keyPositions.push({ x: 360, y: H - 425, vineIdx: 22, locked: true, rising: false, atLock: false });
+
+    lockPositions.push({ x: 180, y: H - 460 });
+    lockPositions.push({ x: 270, y: H - 460 });
+    lockPositions.push({ x: 360, y: H - 460 });
+
+    // Many beetles — 6 total
+    beetleSpawns.push({ x: 10, y: H - 95, platformIdx: 1, dir: 1, speed: 1.1 });
+    beetleSpawns.push({ x: 380, y: H - 105, platformIdx: 3, dir: -1, speed: 1.0 });
+    beetleSpawns.push({ x: 100, y: H - 165, platformIdx: 4, dir: 1, speed: 1.2 });
+    beetleSpawns.push({ x: 350, y: H - 235, platformIdx: 8, dir: -1, speed: 1.1 });
+    beetleSpawns.push({ x: 60, y: H - 300, platformIdx: 9, dir: 1, speed: 1.3 });
+    beetleSpawns.push({ x: 150, y: H - 360, platformIdx: 11, dir: -1, speed: 1.0 });
+
+    // Flamethrower pickup on tier 4
+    flamethrower = { x: 400, y: H - 295, collected: false };
   }
 
   return { platforms, vines, fruits, enemySpawns, lockPositions, keyPositions, beetleSpawns, flamethrower };
@@ -647,7 +776,7 @@ let musicPlaying = false;
 let musicInterval = null;
 
 function getLevelMusic(lvl) {
-  const mod = ((lvl - 1) % 3) + 1;
+  const mod = ((lvl - 1) % 4) + 1;
   if (mod === 1) {
     // Level 1: Bright, bouncy jungle romp (C major pentatonic, 170 bpm)
     return {
@@ -734,7 +863,7 @@ function getLevelMusic(lvl) {
         0, 1, 0, 0, 1, 0, 0, 1,
       ],
     };
-  } else {
+  } else if (mod === 3) {
     // Level 3: Frantic, high-energy finale (E minor, 200 bpm)
     return {
       bpm: 200,
@@ -775,6 +904,49 @@ function getLevelMusic(lvl) {
         0, 0, 1, 0, 1, 0, 0, 1,
         0, 1, 0, 0, 1, 0, 1, 0,
         0, 1, 0, 1, 0, 0, 1, 0,
+      ],
+    };
+  } else {
+    // Level 4: Volcanic depths - heavy, ominous groove (A minor, 160 bpm)
+    return {
+      bpm: 160,
+      bassWave: 'sawtooth',
+      melodyWave: 'square',
+      bass: [
+        110, 110, 0, 110, 131, 0, 147, 0,
+        165, 165, 0, 147, 131, 0, 110, 0,
+        131, 131, 0, 147, 165, 0, 196, 165,
+        147, 0, 131, 0, 110, 131, 110, 0,
+      ],
+      melody: [
+        440, 0, 523, 0, 659, 523, 0, 440,
+        523, 659, 0, 784, 659, 0, 523, 0,
+        440, 523, 659, 0, 784, 880, 0, 784,
+        659, 0, 523, 440, 0, 523, 440, 0,
+      ],
+      arp: [
+        220, 262, 330, 440, 330, 262, 220, 330,
+        262, 330, 440, 523, 440, 330, 262, 220,
+        247, 294, 370, 494, 370, 294, 247, 370,
+        220, 262, 330, 440, 523, 440, 330, 220,
+      ],
+      kick: [
+        1, 0, 0, 1, 0, 0, 1, 0,
+        1, 0, 0, 1, 0, 1, 0, 0,
+        1, 0, 1, 0, 0, 1, 0, 0,
+        1, 0, 0, 1, 0, 0, 1, 1,
+      ],
+      hihat: [
+        1, 0, 1, 1, 0, 1, 1, 0,
+        1, 0, 1, 1, 0, 1, 1, 0,
+        1, 0, 1, 1, 0, 1, 1, 0,
+        1, 0, 1, 1, 0, 1, 1, 1,
+      ],
+      snare: [
+        0, 0, 0, 0, 1, 0, 0, 1,
+        0, 0, 0, 0, 1, 0, 0, 0,
+        0, 0, 0, 1, 0, 0, 0, 1,
+        0, 0, 1, 0, 0, 1, 0, 0,
       ],
     };
   }
